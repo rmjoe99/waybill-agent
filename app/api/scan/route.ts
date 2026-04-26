@@ -105,6 +105,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const inferredBinCode = inferBinCode(extracted);
+    if (inferredBinCode && !extracted.bin_code) {
+      extracted = {
+        ...extracted,
+        bin_code: inferredBinCode,
+        notes: extracted.notes
+          ? `${extracted.notes} Normalized bin code: ${inferredBinCode}.`
+          : `Normalized bin code: ${inferredBinCode}.`,
+      };
+    }
+
     let expected: Bin | null = null;
     if (extracted.bin_code) {
       const { data } = await sb
@@ -180,6 +191,36 @@ function stripFences(s: string): string {
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/```\s*$/i, '')
     .trim();
+}
+
+function inferBinCode(extracted: VisionExtraction): string | null {
+  const fromCode = normalizeBinCode(extracted.bin_code);
+  if (fromCode) return fromCode;
+
+  const fromNotes = normalizeBinCode(extracted.notes);
+  if (fromNotes) return fromNotes;
+
+  return null;
+}
+
+function normalizeBinCode(input: string | null | undefined): string | null {
+  if (!input) return null;
+  const text = input.trim().toUpperCase();
+  if (!text) return null;
+
+  const direct = text.match(/^([A-Z])-(\d{2})$/);
+  if (direct) return `${direct[1]}-${direct[2]}`;
+
+  const compact = text.match(/^([A-Z])(\d{2})$/);
+  if (compact) return `${compact[1]}-${compact[2]}`;
+
+  const prefixed = text.match(/^(?:FL[-_ ]*)?([A-Z])0?(\d{2})(?:[A-Z]\d{2})?$/);
+  if (prefixed) return `${prefixed[1]}-${prefixed[2].padStart(2, '0')}`;
+
+  const embedded = text.match(/(?:^|[^A-Z0-9])(?:FL[-_ ]*)?([A-Z])0?(\d{2})(?:[A-Z]\d{2})?(?:[^A-Z0-9]|$)/);
+  if (embedded) return `${embedded[1]}-${embedded[2].padStart(2, '0')}`;
+
+  return null;
 }
 
 function classify(
