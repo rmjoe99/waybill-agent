@@ -15,7 +15,13 @@ export function SeverityBadge({ severity }: { severity: Severity }) {
   );
 }
 
-export function VarianceTypeBadge({ type }: { type: VarianceType }) {
+export function VarianceTypeBadge({
+  type,
+  binMatched = false,
+}: {
+  type: VarianceType;
+  binMatched?: boolean;
+}) {
   const label =
     type === 'match'
       ? 'Match'
@@ -23,7 +29,9 @@ export function VarianceTypeBadge({ type }: { type: VarianceType }) {
         ? 'Wrong item'
         : type === 'qty_diff'
           ? 'Qty mismatch'
-          : 'Unknown bin';
+          : binMatched
+            ? 'Item not read'
+            : 'Unknown bin';
   return (
     <span className="inline-flex items-center rounded-md bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-700 ring-1 ring-inset ring-zinc-200">
       {label}

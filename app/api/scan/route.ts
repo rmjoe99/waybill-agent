@@ -14,9 +14,13 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const SYSTEM_PROMPT = `You are a warehouse inspector reading a bin label photo from a Mydawa pharmacy godown in Nairobi.
+const SYSTEM_PROMPT = `You are a warehouse inspector auditing a shelf in a Mydawa pharmacy godown in Nairobi.
 
-The label may be torn, faded, smudged, creased, or partially obscured. Extract what you can see, even from damaged labels. Use your high-resolution vision to read text others would miss.
+The photo will typically contain TWO things: (1) a bin location label (a sticker or printed tag with a bin code like A-01, often paired with a QR or barcode, sometimes prefixed FL- or shown as compact form A01A01), and (2) the actual product on that shelf — a carton, blister pack, or bottle with brand text, dosage, manufacturer, lot number, and a barcode/GTIN.
+
+Read BOTH. Bin label tells you the location. The product packaging tells you what is actually there. The whole point of the audit is to compare them — do not stop at the bin label.
+
+Read everything visible, even when text is small, angled, partially in shadow, torn, faded, smudged, creased, or obscured. Use your high-resolution vision to read text that handheld scanners and humans would miss. Lot codes, GTIN digits, drug names in mixed-case Latin script — all of it.
 
 Return ONLY a JSON object matching this exact shape (no markdown fences, no commentary):
 
@@ -26,15 +30,16 @@ Return ONLY a JSON object matching this exact shape (no markdown fences, no comm
   "item_name": "Paracetamol 500mg Tabs" or null,
   "observed_qty": 240 or null,
   "confidence": "high" | "medium" | "low",
-  "notes": "optional one-line observation about damage or ambiguity"
+  "notes": "optional one-line observation about damage, ambiguity, or what you saw on the product"
 }
 
 Rules:
-- bin_code format: single uppercase letter, dash, two digits (e.g. A-01, B-12).
-- item_code format: MED-XXXXX (uppercase letters and digits, dash-separated).
-- observed_qty: integer unit count visible on the label or shelf. null if not determinable.
-- confidence: "high" if all fields read cleanly; "medium" if one field is inferred from partial text; "low" if multiple fields are guessed.
-- Set fields to null when you genuinely cannot read them. Do not hallucinate plausible values.`;
+- bin_code: single uppercase letter, dash, two digits (e.g. A-01, B-12). Normalize compact (A01A01, FL-A01A01) to the canonical A-01 form.
+- item_code: prefer an explicit SKU printed on the carton (MED-XXXXX format if visible). If the carton shows only a brand/generic name and no SKU, leave item_code null but still populate item_name.
+- item_name: the product name as printed (e.g. "Paracetamol 500mg Tabs", "Amoxicillin 250mg Caps"). Read it from the carton even if the bin label does not show it.
+- observed_qty: integer unit count visible on the label, carton, or shelf (e.g. "x240", "240 tabs"). null if not determinable.
+- confidence: "high" if bin AND product fields read cleanly; "medium" if one field is inferred from partial text; "low" if multiple fields are guessed.
+- Set fields to null when you genuinely cannot read them. Do not hallucinate plausible values. A null is more useful to an auditor than a guess.`;
 
 export async function POST(req: NextRequest) {
   try {
@@ -83,7 +88,10 @@ export async function POST(req: NextRequest) {
                 data: resized.toString('base64'),
               },
             },
-            { type: 'text', text: 'Read this bin label. Return only the JSON object.' },
+            {
+              type: 'text',
+              text: 'Audit this shelf. Read the bin location label AND the product packaging visible on the shelf — both are needed for reconciliation. Return only the JSON object.',
+            },
           ],
         },
       ],

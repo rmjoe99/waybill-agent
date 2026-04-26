@@ -163,7 +163,10 @@ export function Scanner({ auditId }: { auditId: string }) {
             </div>
 
             <div className="mt-4 flex items-center justify-between rounded-xl bg-white/80 px-3 py-2 ring-1 ring-inset ring-black/5">
-              <VarianceTypeBadge type={result.variance_type} />
+              <VarianceTypeBadge
+                type={result.variance_type}
+                binMatched={result.expected != null}
+              />
               {result.expected && result.extracted.observed_qty != null && (
                 <div className="font-mono text-xs text-zinc-700">
                   Δ {result.extracted.observed_qty - result.expected.expected_qty}

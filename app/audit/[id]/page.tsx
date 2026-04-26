@@ -126,7 +126,7 @@ function VarianceRow({ v }: { v: Variance }) {
       <div className="flex items-center justify-between gap-2">
         <div className="font-mono text-sm font-semibold text-zinc-900">{v.bin_code}</div>
         <div className="flex items-center gap-2">
-          <VarianceTypeBadge type={v.variance_type} />
+          <VarianceTypeBadge type={v.variance_type} binMatched={v.expected != null} />
           <SeverityBadge severity={v.severity} />
         </div>
       </div>
