@@ -42,19 +42,32 @@ export function Scanner({ auditId }: { auditId: string }) {
     setResult(null);
     setLastFile(file);
     try {
+      let upload: Blob;
+      try {
+        upload = await normalizeToJpeg(file);
+      } catch {
+        setError(
+          'Could not read this photo. Try a JPEG/PNG, or retake with the camera.',
+        );
+        return;
+      }
+
       const fd = new FormData();
-      fd.append('image', file);
+      fd.append('image', upload, 'scan.jpg');
       fd.append('audit_id', auditId);
       const res = await fetch('/api/scan', { method: 'POST', body: fd });
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
       if (!res.ok) {
-        setError(json.error ?? 'scan failed');
+        setError(json?.error ?? `Scan failed (HTTP ${res.status}).`);
+      } else if (!json) {
+        setError('Server returned an unreadable response.');
       } else {
         setResult(json);
         router.refresh();
       }
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'network error');
+      const msg = e instanceof Error ? e.message : 'network error';
+      setError(friendlyError(msg));
     } finally {
       setBusy(false);
       if (inputRef.current) inputRef.current.value = '';
@@ -209,6 +222,48 @@ export function Scanner({ auditId }: { auditId: string }) {
       )}
     </div>
   );
+}
+
+async function normalizeToJpeg(file: File): Promise<Blob> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('image decode failed'));
+      el.src = objectUrl;
+    });
+
+    const maxDim = 2048;
+    const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('canvas unsupported');
+    ctx.drawImage(img, 0, 0, w, h);
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, 'image/jpeg', 0.9),
+    );
+    if (!blob) throw new Error('jpeg encode failed');
+    return blob;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function friendlyError(msg: string): string {
+  if (/did not match the expected pattern/i.test(msg)) {
+    return 'iOS rejected this photo. Try retaking it, or pick a different one from the library.';
+  }
+  if (/load failed|networkerror|failed to fetch/i.test(msg)) {
+    return 'Network error — check your connection and retry.';
+  }
+  return msg;
 }
 
 function DetectionBar({ result }: { result: ScanResult }) {
