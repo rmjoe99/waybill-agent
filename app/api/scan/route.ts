@@ -166,6 +166,8 @@ export async function POST(req: NextRequest) {
       expected,
       variance_type,
       severity,
+      model_id: MODEL_ID,
+      captured_at: new Date().toISOString(),
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'unknown error';

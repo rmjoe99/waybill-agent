@@ -1,7 +1,17 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { supabaseAdmin } from '@/lib/supabase';
+import { MODEL_ID } from '@/lib/claude';
 import { Scanner } from './Scanner';
+import { MetricCard, SectionCard } from '@/components/waybill/cards';
+import {
+  SeverityBadge,
+  VarianceTypeBadge,
+  AttributionBadge,
+  StatusBadge,
+} from '@/components/waybill/badges';
+import { ArrowLeftIcon } from '@/components/waybill/icons';
+import type { Severity, VarianceType } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -11,8 +21,8 @@ type Variance = {
   bin_code: string;
   expected: { item_code?: string; item_name?: string; expected_qty?: number } | null;
   observed: { item_code: string | null; observed_qty: number | null } | null;
-  variance_type: 'match' | 'wrong_item' | 'qty_diff' | 'unknown_bin';
-  severity: 'ok' | 'warn' | 'critical';
+  variance_type: VarianceType;
+  severity: Severity;
   created_at: string;
 };
 
@@ -34,99 +44,118 @@ export default async function AuditPage({ params }: { params: { id: string } }) 
 
   const counts = (variances ?? []).reduce(
     (acc, v) => {
-      acc[v.severity] = (acc[v.severity] ?? 0) + 1;
+      acc[v.severity as Severity] = (acc[v.severity as Severity] ?? 0) + 1;
       return acc;
     },
-    { ok: 0, warn: 0, critical: 0 } as Record<string, number>,
+    { ok: 0, warn: 0, critical: 0 } as Record<Severity, number>,
   );
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-6">
-      <Link href="/" className="text-xs text-neutral-500 hover:text-neutral-300">
-        ← all audits
+    <main className="mx-auto max-w-2xl px-4 pb-24 pt-6 sm:px-6 sm:pt-8">
+      <Link
+        href="/"
+        className="inline-flex items-center gap-1.5 text-sm text-zinc-600 transition hover:text-zinc-900"
+      >
+        <ArrowLeftIcon className="h-4 w-4" />
+        Back to Dashboard
       </Link>
-      <h1 className="mt-2 text-2xl font-semibold">{audit.warehouse_name}</h1>
-      <div className="mt-1 flex items-center gap-3 text-xs text-neutral-500">
-        <span>started {new Date(audit.started_at).toLocaleString()}</span>
-        <span className="rounded-full border border-neutral-700 px-2 py-0.5 text-neutral-300">
-          {audit.status}
-        </span>
-      </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
-        <Stat label="Match" value={counts.ok} tone="ok" />
-        <Stat label="Warn" value={counts.warn} tone="warn" />
-        <Stat label="Critical" value={counts.critical} tone="critical" />
+      <header className="mt-5 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="font-mono text-xs font-semibold text-zinc-500">
+              AUD-{audit.id.slice(0, 8).toUpperCase()}
+            </div>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-zinc-900">
+              {audit.warehouse_name}
+            </h1>
+            <p className="mt-1 text-sm text-zinc-500">
+              Started {new Date(audit.started_at).toLocaleString('en-GB', { hour12: false })}
+            </p>
+          </div>
+          <StatusBadge status={audit.status} />
+        </div>
+        <div className="mt-4 flex items-center gap-2">
+          <AttributionBadge model={MODEL_ID} />
+        </div>
+      </header>
+
+      <div className="mt-5 grid grid-cols-3 gap-3 sm:gap-4">
+        <MetricCard label="Match" value={counts.ok} />
+        <MetricCard label="Warn" value={counts.warn} />
+        <MetricCard label="Critical" value={counts.critical} />
       </div>
 
       <Scanner auditId={audit.id} />
 
-      <h2 className="mt-8 text-sm font-medium uppercase tracking-wide text-neutral-400">
-        Recent scans
-      </h2>
-      <ul className="mt-3 space-y-2">
-        {(variances ?? []).map((v) => (
-          <VarianceCard key={v.id} v={v as Variance} />
-        ))}
-        {(!variances || variances.length === 0) && (
-          <li className="rounded-lg border border-dashed border-neutral-800 px-4 py-6 text-center text-sm text-neutral-500">
-            No scans yet. Tap the camera above.
-          </li>
-        )}
-      </ul>
+      <div className="mt-8">
+        <SectionCard
+          title="Recent scans"
+          description={`${variances?.length ?? 0} bin${(variances?.length ?? 0) === 1 ? '' : 's'} reconciled`}
+        >
+          {variances && variances.length > 0 ? (
+            <ul className="-mx-1 space-y-3">
+              {variances.map((v) => (
+                <VarianceRow key={v.id} v={v as Variance} />
+              ))}
+            </ul>
+          ) : (
+            <div className="rounded-xl border border-dashed border-zinc-300 px-4 py-10 text-center text-sm text-zinc-500">
+              No scans yet. Tap the camera above to read a bin label.
+            </div>
+          )}
+        </SectionCard>
+      </div>
     </main>
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: number; tone: 'ok' | 'warn' | 'critical' }) {
-  const color =
-    tone === 'ok'
-      ? 'border-emerald-700/50 bg-emerald-900/20 text-emerald-300'
-      : tone === 'warn'
-        ? 'border-amber-700/50 bg-amber-900/20 text-amber-300'
-        : 'border-rose-700/50 bg-rose-900/20 text-rose-300';
-  return (
-    <div className={`rounded-lg border px-3 py-2 ${color}`}>
-      <div className="text-lg font-semibold">{value}</div>
-      <div className="text-[10px] uppercase tracking-wider opacity-70">{label}</div>
-    </div>
-  );
-}
-
-function VarianceCard({ v }: { v: Variance }) {
-  const sevColor =
+function VarianceRow({ v }: { v: Variance }) {
+  const accent =
     v.severity === 'ok'
       ? 'border-l-emerald-500'
       : v.severity === 'warn'
         ? 'border-l-amber-500'
         : 'border-l-rose-500';
-  const label =
-    v.variance_type === 'match'
-      ? 'Match'
-      : v.variance_type === 'wrong_item'
-        ? 'Wrong item'
-        : v.variance_type === 'qty_diff'
-          ? 'Qty mismatch'
-          : 'Unknown bin';
+  const delta =
+    v.expected?.expected_qty != null && v.observed?.observed_qty != null
+      ? v.observed.observed_qty - v.expected.expected_qty
+      : null;
   return (
-    <li className={`rounded-md border border-neutral-800 border-l-4 ${sevColor} bg-neutral-900/40 px-3 py-2`}>
-      <div className="flex items-center justify-between">
-        <div className="font-mono text-sm">{v.bin_code}</div>
-        <div className="text-xs text-neutral-400">{label}</div>
+    <li className={`rounded-xl border border-zinc-200 border-l-4 ${accent} bg-white px-4 py-3 shadow-sm`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="font-mono text-sm font-semibold text-zinc-900">{v.bin_code}</div>
+        <div className="flex items-center gap-2">
+          <VarianceTypeBadge type={v.variance_type} />
+          <SeverityBadge severity={v.severity} />
+        </div>
       </div>
-      <div className="mt-1 grid grid-cols-2 gap-2 text-xs">
+      <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
         <div>
-          <div className="text-neutral-500">Expected</div>
-          <div className="text-neutral-300">
-            {v.expected?.item_code ?? '—'} <span className="text-neutral-500">×{v.expected?.expected_qty ?? '—'}</span>
-          </div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Expected</div>
+          <div className="mt-0.5 font-mono text-zinc-900">{v.expected?.item_code ?? '—'}</div>
+          {v.expected?.expected_qty != null && (
+            <div className="text-[11px] text-zinc-500">×{v.expected.expected_qty}</div>
+          )}
         </div>
         <div>
-          <div className="text-neutral-500">Observed</div>
-          <div className="text-neutral-300">
-            {v.observed?.item_code ?? '—'} <span className="text-neutral-500">×{v.observed?.observed_qty ?? '—'}</span>
-          </div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Observed</div>
+          <div className="mt-0.5 font-mono text-zinc-900">{v.observed?.item_code ?? '—'}</div>
+          {v.observed?.observed_qty != null && (
+            <div className="text-[11px] text-zinc-500">×{v.observed.observed_qty}</div>
+          )}
         </div>
+      </div>
+      {delta != null && delta !== 0 && (
+        <div className="mt-3 flex items-center justify-between border-t border-zinc-100 pt-2 text-[11px]">
+          <span className="text-zinc-500">Quantity delta</span>
+          <span className={`font-mono font-semibold ${delta < 0 ? 'text-rose-700' : 'text-amber-700'}`}>
+            {delta > 0 ? '+' : ''}{delta}
+          </span>
+        </div>
+      )}
+      <div className="mt-2 text-[10px] text-zinc-400">
+        {new Date(v.created_at).toLocaleString('en-GB', { hour12: false })}
       </div>
     </li>
   );
