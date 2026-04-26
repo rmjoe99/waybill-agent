@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { SeverityBadge, VarianceTypeBadge, ConfidencePill } from '@/components/waybill/badges';
 import { CitationChain } from '@/components/waybill/evidence';
 import { ErrorBanner } from '@/components/waybill/error-banner';
-import { CameraIcon, RefreshIcon } from '@/components/waybill/icons';
+import { CameraIcon, RefreshIcon, CheckCircleIcon } from '@/components/waybill/icons';
 
 type ScanResult = {
   scan_id: string;
@@ -133,6 +133,8 @@ export function Scanner({ auditId }: { auditId: string }) {
           </div>
 
           <div className="px-4 py-4">
+            <DetectionBar result={result} />
+
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Expected</div>
@@ -203,6 +205,54 @@ export function Scanner({ auditId }: { auditId: string }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function DetectionBar({ result }: { result: ScanResult }) {
+  const fields = [
+    { label: 'Bin', value: result.extracted.bin_code },
+    { label: 'SKU', value: result.extracted.item_code },
+    { label: 'Name', value: result.extracted.item_name },
+    {
+      label: 'Qty',
+      value: result.extracted.observed_qty != null ? String(result.extracted.observed_qty) : null,
+    },
+  ];
+
+  return (
+    <div className="mb-4 rounded-xl bg-white/80 p-3 ring-1 ring-inset ring-black/5">
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+        Found In Photo
+      </div>
+      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {fields.map((field) => {
+          const found = Boolean(field.value);
+          return (
+            <li
+              key={field.label}
+              className={`rounded-lg px-2.5 py-2 text-xs ring-1 ring-inset ${
+                found
+                  ? 'bg-emerald-50 text-emerald-800 ring-emerald-200'
+                  : 'bg-zinc-50 text-zinc-500 ring-zinc-200'
+              }`}
+            >
+              <div className="flex items-center gap-1.5">
+                {found ? (
+                  <CheckCircleIcon className="h-3.5 w-3.5 text-emerald-600" />
+                ) : (
+                  <span
+                    className="h-3.5 w-3.5 rounded-full border border-zinc-300"
+                    aria-hidden
+                  />
+                )}
+                <span className="font-semibold">{field.label}</span>
+              </div>
+              <div className="mt-1 truncate font-mono">{field.value ?? 'not found'}</div>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
