@@ -1,34 +1,54 @@
 'use server';
 
-import { redirect } from 'next/navigation';
 import { supabaseAdmin } from '@/lib/supabase';
 
-export async function createAudit(formData: FormData) {
+export type CreateAuditResult =
+  | { ok: true; auditId: string }
+  | { ok: false; message: string };
+
+export async function createAudit(formData: FormData): Promise<CreateAuditResult> {
   const aisle = String(formData.get('aisle') ?? '').trim();
   const auditor = String(formData.get('auditor') ?? '').trim();
   const notes = String(formData.get('notes') ?? '').trim();
 
-  if (!aisle) throw new Error('Aisle is required');
-  if (!auditor) throw new Error('Auditor name is required');
+  if (!aisle) return { ok: false, message: 'Aisle is required' };
+  if (!auditor) return { ok: false, message: 'Auditor name is required' };
 
   const warehouseName = `Mydawa Embakasi Godown · Aisle ${aisle}`;
+  const startedAt = new Date().toISOString();
 
-  const sb = supabaseAdmin();
-  const { data, error } = await sb
-    .from('audits')
-    .insert({
-      warehouse_name: warehouseName,
-      status: 'in_progress',
-      started_at: new Date().toISOString(),
-      auditor: auditor || null,
-      notes: notes || null,
-    })
-    .select('id')
-    .single();
+  try {
+    const sb = supabaseAdmin();
+    const payloads: Array<Record<string, string>> = [
+      {
+        warehouse_name: warehouseName,
+        status: 'in_progress',
+        started_at: startedAt,
+        auditor,
+        notes,
+      },
+      {
+        warehouse_name: warehouseName,
+        status: 'in_progress',
+        started_at: startedAt,
+      },
+      {
+        warehouse_name: warehouseName,
+        started_at: startedAt,
+      },
+    ];
 
-  if (error || !data) {
-    throw new Error(`Could not create audit: ${error?.message ?? 'unknown error'}`);
+    let lastErrorMessage = 'unknown error';
+    for (const payload of payloads) {
+      const { data, error } = await sb.from('audits').insert(payload).select('id').single();
+      if (data?.id) return { ok: true, auditId: data.id };
+      if (error?.message) lastErrorMessage = error.message;
+    }
+
+    return { ok: false, message: `Could not create audit: ${lastErrorMessage}` };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'unknown error';
+    console.error('createAudit failed:', message);
+    return { ok: false, message: 'Could not start audit right now. Please try again.' };
   }
-
-  redirect(`/audit/${data.id}`);
 }

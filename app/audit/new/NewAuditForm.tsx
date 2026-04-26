@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { createAudit } from './actions';
 import { ErrorBanner } from '@/components/waybill/error-banner';
 
 const AISLES = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11', 'A12'];
 
 export function NewAuditForm() {
+  const router = useRouter();
   const [aisle, setAisle] = useState('');
   const [auditor, setAuditor] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -17,11 +19,12 @@ export function NewAuditForm() {
   function onSubmit(formData: FormData) {
     setError(null);
     startTransition(async () => {
-      try {
-        await createAudit(formData);
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : 'Could not start audit');
+      const result = await createAudit(formData);
+      if (!result.ok) {
+        setError(result.message);
+        return;
       }
+      router.push(`/audit/${result.auditId}`);
     });
   }
 
