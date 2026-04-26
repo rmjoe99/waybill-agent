@@ -34,3 +34,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# claude code workspace
+.claude/
+
+# cursor ide
+.cursor/
+
+# scratch agent worktree
+b_ctn9jSwYNL7/
